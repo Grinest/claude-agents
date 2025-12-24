@@ -41,7 +41,6 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
           PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_BODY="${{ github.event.pull_request.body }}"
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           BASE_REF="${{ github.event.pull_request.base.ref }}"
           HEAD_REF="${{ github.event.pull_request.head.ref }}"
@@ -52,8 +51,10 @@ jobs:
           echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
           echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
 
-          # Save PR body to file (handle multiline)
-          echo "$PR_BODY" > pr_body.txt
+          # Save PR body to file (handle multiline and special characters safely)
+          cat > pr_body.txt <<'EOF'
+          ${{ github.event.pull_request.body }}
+          EOF
 
       - name: Get changed files
         id: changed-files
@@ -122,32 +123,48 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # Load reviewer agent prompt
-          REVIEWER_PROMPT=$(cat << 'AGENT_PROMPT'
-          $(cat agents/reviewer-backend-py.md)
-          AGENT_PROMPT
-          )
+          # Build the user prompt
+          echo "Please review this Pull Request:" > user_prompt.txt
+          echo "" >> user_prompt.txt
+          echo "## PR Information" >> user_prompt.txt
+          cat review_context.json >> user_prompt.txt
+          echo "" >> user_prompt.txt
+          echo "## PR Description" >> user_prompt.txt
+          cat pr_body.txt >> user_prompt.txt
+          echo "" >> user_prompt.txt
+          echo "## Changed Files" >> user_prompt.txt
+          cat changed_files.txt >> user_prompt.txt
+          echo "" >> user_prompt.txt
+          echo "## File Diffs" >> user_prompt.txt
+          echo '```diff' >> user_prompt.txt
+          cat diffs/all_diffs.txt >> user_prompt.txt
+          echo '```' >> user_prompt.txt
+          echo "" >> user_prompt.txt
+          echo "Provide a comprehensive code review following your review process. Include:" >> user_prompt.txt
+          echo "1. Overall assessment (APPROVE/REQUEST_CHANGES)" >> user_prompt.txt
+          echo "2. Architecture analysis" >> user_prompt.txt
+          echo "3. Code quality issues" >> user_prompt.txt
+          echo "4. Testing coverage" >> user_prompt.txt
+          echo "5. Security concerns" >> user_prompt.txt
+          echo "6. Specific actionable recommendations" >> user_prompt.txt
+          echo "" >> user_prompt.txt
+          echo "Format your response in Markdown." >> user_prompt.txt
 
-          # Prepare the review request
-          PR_CONTEXT=$(cat review_context.json)
-          PR_BODY=$(cat pr_body.txt | jq -Rs .)
-          CHANGED_FILES=$(cat changed_files.txt | jq -Rs .)
-          FILE_DIFFS=$(cat diffs/all_diffs.txt | jq -Rs .)
-
-          # Create API request
-          cat > api_request.json <<EOF
-          {
-            "model": "claude-sonnet-4-20250514",
-            "max_tokens": 4096,
-            "system": "$REVIEWER_PROMPT",
-            "messages": [
-              {
-                "role": "user",
-                "content": "Please review this Pull Request:\n\n## PR Information\n\`\`\`json\n$PR_CONTEXT\n\`\`\`\n\n## PR Description\n$PR_BODY\n\n## Changed Files\n$CHANGED_FILES\n\n## File Diffs\n\`\`\`diff\n$FILE_DIFFS\n\`\`\`\n\nProvide a comprehensive code review following your review process. Include:\n1. Overall assessment (APPROVE/REQUEST_CHANGES)\n2. Architecture analysis\n3. Code quality issues\n4. Testing coverage\n5. Security concerns\n6. Specific actionable recommendations\n\nFormat your response in Markdown."
-              }
-            ]
-          }
-          EOF
+          # Create API request using jq for proper JSON escaping
+          jq -n \
+            --rawfile system .claude/agents/reviewer-backend-py.md \
+            --rawfile prompt user_prompt.txt \
+            '{
+              "model": "claude-sonnet-4-20250514",
+              "max_tokens": 4096,
+              "system": $system,
+              "messages": [
+                {
+                  "role": "user",
+                  "content": $prompt
+                }
+              ]
+            }' > api_request.json
 
           # Call Claude API
           RESPONSE=$(curl -s -X POST https://api.anthropic.com/v1/messages \
@@ -299,3 +316,11 @@ jobs:
             changed_files.txt
             diffs/
           retention-days: 30
+
+      - name: Block Merge if Changes Requested
+        if: steps.claude-review.outputs.decision == 'REQUEST_CHANGES'
+        run: |
+          echo "::error::❌ Code review requested changes. Please address the feedback before merging."
+          echo "Review decision: REQUEST_CHANGES"
+          echo "See the review comment on the PR for details."
+          exit 1
