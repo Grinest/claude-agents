@@ -1,0 +1,147 @@
+name: Validate Agents
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'agents/**'
+      - 'scripts/validate-agents.sh'
+      - '.github/workflows/validate-agents.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'agents/**'
+      - 'scripts/validate-agents.sh'
+
+jobs:
+  validate:
+    name: Validate Agent Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make validation script executable
+        run: chmod +x scripts/validate-agents.sh
+
+      - name: Run agent validation
+        run: ./scripts/validate-agents.sh
+
+      - name: Upload validation results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: |
+            agents/
+            scripts/validate-agents.sh
+          retention-days: 5
+
+  lint-markdown:
+    name: Lint Markdown Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+
+      - name: Lint agent markdown files
+        run: |
+          markdownlint agents/*.md --config .markdownlint.json || true
+        continue-on-error: true
+
+  check-yaml:
+    name: Check YAML Frontmatter
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Validate YAML frontmatter
+        run: |
+          python3 << 'EOF'
+          import yaml
+          import os
+          import sys
+
+          agents_dir = 'agents'
+          failed = False
+
+          for filename in os.listdir(agents_dir):
+              if not filename.endswith('.md'):
+                  continue
+
+              filepath = os.path.join(agents_dir, filename)
+              with open(filepath, 'r') as f:
+                  content = f.read()
+
+              # Extract frontmatter
+              if not content.startswith('---\n'):
+                  print(f"❌ {filename}: Missing frontmatter start")
+                  failed = True
+                  continue
+
+              try:
+                  end = content.index('\n---\n', 4)
+                  frontmatter = content[4:end]
+                  data = yaml.safe_load(frontmatter)
+
+                  # Validate required fields
+                  required = ['name', 'description', 'model', 'color']
+                  for field in required:
+                      if field not in data:
+                          print(f"❌ {filename}: Missing required field '{field}'")
+                          failed = True
+
+                  print(f"✅ {filename}: Valid YAML frontmatter")
+              except Exception as e:
+                  print(f"❌ {filename}: Invalid YAML - {str(e)}")
+                  failed = True
+
+          sys.exit(1 if failed else 0)
+          EOF
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [validate, check-yaml]
+    if: always()
+
+    steps:
+      - name: Check validation status
+        run: |
+          echo "## Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.validate.result }}" == "success" ]; then
+            echo "✅ Structural validation: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Structural validation: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.check-yaml.result }}" == "success" ]; then
+            echo "✅ YAML validation: **PASSED**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ YAML validation: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See details above for more information." >> $GITHUB_STEP_SUMMARY

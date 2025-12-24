@@ -2,3 +2,27 @@
 .idea
 .idea/
 .idea/*
+
+# Claude agents directory (when testing locally)
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*~
+
+# Test directories
+test-project/
+example-project/
+sandbox/
+
+# Backup files
+*.bak
+*.backup
