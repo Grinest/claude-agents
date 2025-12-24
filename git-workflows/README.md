@@ -33,7 +33,7 @@ Workflow de revisión de código automatizada usando Claude AI para proyectos Py
 
 **Documentación completa:**
 - [Architecture](../docs/CODE_REVIEW_AGENT_ARCHITECTURE.md)
-- [Deployment](../docs/DEPLOYMENT.md)
+- [Deployment](../docs/CI_CD_GUIDE_TO_CODE_REVIEW_AGENT.md)
 
 ## 🚀 Instalación
 

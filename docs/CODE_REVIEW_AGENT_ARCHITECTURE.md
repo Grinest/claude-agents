@@ -481,12 +481,3 @@ Costo: $0 (dentro del free tier)
 
 ---
 
-## Próximos Pasos
-
-1. **Crear el agente**: `reviewer-backend-py.md`
-2. **Instalar el workflow**: Usar `./scripts/sync-workflows.sh` o copiar desde `git-workflows/code-review-backend-py.yml`
-3. **Configurar secrets**: `ANTHROPIC_API_KEY` en GitHub
-4. **Testing**: Crear PR de prueba
-5. **Refinamiento**: Ajustar basado en feedback
-
-¿Procedemos con la implementación?

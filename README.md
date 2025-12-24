@@ -125,7 +125,7 @@ Workflow que automatiza el code review usando el agente `reviewer-backend-py` de
 
 **Documentación completa:**
 - [Arquitectura del Code Review Agent](./docs/CODE_REVIEW_AGENT_ARCHITECTURE.md)
-- [Guía de Despliegue](./docs/DEPLOYMENT.md)
+- [Guía de Despliegue](docs/CI_CD_GUIDE_TO_CODE_REVIEW_AGENT.md)
 - [README de Workflows](./git-workflows/README.md)
 
 ### Instalación de Workflows
@@ -318,9 +318,10 @@ claude-agents/
 │   ├── qa-backend-py.md           # Agente de QA/testing
 │   └── reviewer-backend-py.md     # Agente de code review
 ├── docs/                           # Documentación
-│   ├── CODE_REVIEW_AGENT_ARCHITECTURE.md  # Arquitectura del code reviewer
-│   ├── DEPLOYMENT.md              # Guía de despliegue
-│   └── TESTING.md                 # Estrategia de testing
+│   ├── CI_CD_GUIDE_TO_CODE_REVIEW_AGENT.md  # Guía de CI/CD para code review
+│   ├── CODE_REVIEW_AGENT_ARCHITECTURE.md    # Arquitectura del code reviewer
+│   ├── QUICKSTART_TO_USE_AGENTS.md          # Inicio rápido
+│   └── TESTING_STRATEGY.md                  # Estrategia de testing
 ├── git-workflows/                  # Workflows reutilizables
 │   ├── README.md                  # Documentación de workflows
 │   └── code-review-backend-py.yml # Workflow de code review
@@ -328,8 +329,7 @@ claude-agents/
     ├── sync-agents.sh             # Script de sincronización de agentes
     ├── sync-workflows.sh          # Script de sincronización de workflows
     ├── validate-agents.sh         # Script de validación de agentes
-    ├── README.md                  # Documentación del script
-    └── QUICKSTART.md              # Guía rápida
+    └── README.md                  # Documentación de scripts
 ```
 
 ## Configuración para Equipos
@@ -528,6 +528,7 @@ Para actualizar agentes a la última versión:
 
 ## Recursos
 
-- [Documentación del Script](./scripts/README.md) - Documentación completa del script de sincronización
-- [Guía Rápida](./scripts/QUICKSTART.md) - Inicio rápido
+- [Guía Rápida](docs/QUICKSTART_TO_USE_AGENTS.md) - Inicio rápido con agentes y workflows
+- [Documentación de Scripts](./scripts/README.md) - Documentación de scripts de sincronización
+- [Documentación de Workflows](./git-workflows/README.md) - Workflows de GitHub Actions
 - [Claude Code Documentation](https://docs.anthropic.com/claude/docs) - Documentación oficial de Claude
