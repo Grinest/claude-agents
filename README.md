@@ -81,7 +81,124 @@ Agente especializado en testing, QA y chaos engineering para sistemas backend Py
 - Validar seguridad del código
 - Testing de performance
 
-## Instalación
+### 4. Reviewer Backend Python Agent (`reviewer-backend-py.md`)
+**Code Review Automatizado para Backend Python**
+
+Agente especializado en revisión de código que combina las perspectivas del Architect, Backend-Py y QA para proporcionar reviews completas de PRs.
+
+**Capacidades:**
+- Análisis de arquitectura y patrones de diseño
+- Validación de calidad de código (type hints, SOLID, DRY)
+- Revisión de tests y cobertura (>90% objetivo)
+- Detección de vulnerabilidades de seguridad
+- Evaluación de performance y queries
+- Generación de feedback estructurado con scores
+- Decisión de APPROVE/REQUEST_CHANGES
+
+**Cuándo usar:**
+- Code reviews automatizados en GitHub PRs
+- Validación de calidad antes de merge
+- Asegurar estándares de arquitectura
+- Verificar cobertura de testing
+- Auditorías de seguridad
+
+## GitHub Workflows
+
+Este repositorio incluye workflows de GitHub Actions reutilizables para automatizar procesos de CI/CD.
+
+### Workflows Disponibles
+
+#### Code Review Backend Python (`code-review-backend-py.yml`)
+
+Workflow que automatiza el code review usando el agente `reviewer-backend-py` de Claude AI.
+
+**Características:**
+- ✅ Revisión automática de PRs
+- ✅ Análisis de arquitectura, código y testing
+- ✅ Aprobación/rechazo basado en criterios de calidad
+- ✅ Bloqueo de merge si no cumple estándares
+- ✅ Comentarios detallados en PR
+
+**Requisitos:**
+- Secret: `ANTHROPIC_API_KEY`
+- Permisos: write para pull-requests
+
+**Documentación completa:**
+- [Arquitectura del Code Review Agent](./docs/CODE_REVIEW_AGENT_ARCHITECTURE.md)
+- [Guía de Despliegue](./docs/DEPLOYMENT.md)
+- [README de Workflows](./git-workflows/README.md)
+
+### Instalación de Workflows
+
+#### Método 1: Script de Sincronización (Recomendado)
+
+```bash
+# Desde tu proyecto
+./scripts/sync-workflows.sh
+
+# Con repositorio personalizado
+./scripts/sync-workflows.sh https://github.com/tu-empresa/workflows.git
+
+# Con variable de entorno
+WORKFLOWS_REPO=https://github.com/tu-empresa/repo.git ./scripts/sync-workflows.sh
+```
+
+El script te permite:
+1. Ver todos los workflows disponibles
+2. Seleccionar cuáles instalar
+3. Copiarlos automáticamente a `.github/workflows/`
+4. Ver qué secrets necesitas configurar
+
+#### Método 2: Copia Manual
+
+```bash
+# Copiar workflow específico
+cp git-workflows/code-review-backend-py.yml .github/workflows/
+
+# Copiar todos los workflows
+cp git-workflows/*.yml .github/workflows/
+```
+
+#### Método 3: Instalación Global
+
+```bash
+# Clonar en directorio home
+git clone https://github.com/juanpaconpa/claude-agents.git ~/.claude-agents
+
+# Crear alias
+echo 'alias sync-workflows="~/.claude-agents/scripts/sync-workflows.sh"' >> ~/.bashrc
+source ~/.bashrc
+
+# Usar desde cualquier proyecto
+cd /tu/proyecto
+sync-workflows
+```
+
+### Configuración Post-Instalación
+
+Después de instalar un workflow:
+
+1. **Configurar Secrets**:
+   ```
+   Repositorio → Settings → Secrets → Actions → New secret
+   ```
+   - `ANTHROPIC_API_KEY`: Tu API key de Anthropic
+
+2. **Configurar Permisos**:
+   ```
+   Settings → Actions → General → Workflow permissions
+   ```
+   - ✅ Read and write permissions
+   - ✅ Allow GitHub Actions to create and approve pull requests
+
+3. **Personalizar** (opcional):
+   - Editar triggers en `.github/workflows/`
+   - Ajustar modelos de Claude
+   - Modificar criterios de revisión
+
+Ver [documentación completa de workflows](./git-workflows/README.md) para más detalles.
+
+## Instalación de Agentes
 
 ### Método 1: Script de Sincronización (Recomendado)
 
@@ -190,16 +307,29 @@ export AGENTS_REPO="https://github.com/empresa/agents.git"
 ```
 claude-agents/
 ├── .gitignore
-├── .idea/                      # IntelliJ IDEA config
-├── README.md                   # Este archivo
-├── agents/                     # Agentes de Claude
-│   ├── architect.md           # Agente de arquitectura
-│   ├── backend-py.md          # Agente de backend Python
-│   └── qa-backend-py.md       # Agente de QA/testing
-└── scripts/                    # Scripts de utilidad
-    ├── sync-agents.sh         # Script de sincronización
-    ├── README.md              # Documentación del script
-    └── QUICKSTART.md          # Guía rápida
+├── .github/
+│   └── workflows/
+│       └── validate-agents.yml    # CI para validar agentes
+├── .idea/                          # IntelliJ IDEA config
+├── README.md                       # Este archivo
+├── agents/                         # Agentes de Claude
+│   ├── architect.md               # Agente de arquitectura
+│   ├── backend-py.md              # Agente de backend Python
+│   ├── qa-backend-py.md           # Agente de QA/testing
+│   └── reviewer-backend-py.md     # Agente de code review
+├── docs/                           # Documentación
+│   ├── CODE_REVIEW_AGENT_ARCHITECTURE.md  # Arquitectura del code reviewer
+│   ├── DEPLOYMENT.md              # Guía de despliegue
+│   └── TESTING.md                 # Estrategia de testing
+├── git-workflows/                  # Workflows reutilizables
+│   ├── README.md                  # Documentación de workflows
+│   └── code-review-backend-py.yml # Workflow de code review
+└── scripts/                        # Scripts de utilidad
+    ├── sync-agents.sh             # Script de sincronización de agentes
+    ├── sync-workflows.sh          # Script de sincronización de workflows
+    ├── validate-agents.sh         # Script de validación de agentes
+    ├── README.md                  # Documentación del script
+    └── QUICKSTART.md              # Guía rápida
 ```
 
 ## Configuración para Equipos

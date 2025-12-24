@@ -1,0 +1,301 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+
+# Prevent multiple runs for the same PR
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  code-review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for better diff
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Get PR information
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_BODY="${{ github.event.pull_request.body }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr_author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+
+          # Save PR body to file (handle multiline)
+          echo "$PR_BODY" > pr_body.txt
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          # Get list of changed Python files
+          git diff --name-only origin/${{ steps.pr-info.outputs.base_ref }}...HEAD \
+            | grep '\.py$' \
+            | tee changed_files.txt
+
+          CHANGED_COUNT=$(wc -l < changed_files.txt)
+          echo "count=$CHANGED_COUNT" >> $GITHUB_OUTPUT
+
+          # Get lines changed
+          LINES_ADDED=$(git diff --numstat origin/${{ steps.pr-info.outputs.base_ref }}...HEAD | awk '{sum+=$1} END {print sum}')
+          LINES_DELETED=$(git diff --numstat origin/${{ steps.pr-info.outputs.base_ref }}...HEAD | awk '{sum+=$2} END {print sum}')
+
+          echo "lines_added=$LINES_ADDED" >> $GITHUB_OUTPUT
+          echo "lines_deleted=$LINES_DELETED" >> $GITHUB_OUTPUT
+
+      - name: Get file diffs
+        id: file-diffs
+        run: |
+          # Create diffs for changed files
+          mkdir -p diffs
+
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              echo "=== DIFF FOR: $file ===" >> diffs/all_diffs.txt
+              git diff origin/${{ steps.pr-info.outputs.base_ref }}...HEAD -- "$file" >> diffs/all_diffs.txt
+              echo "" >> diffs/all_diffs.txt
+            fi
+          done < changed_files.txt
+
+          # Limit diff size (Claude has token limits)
+          DIFF_SIZE=$(wc -c < diffs/all_diffs.txt)
+          MAX_SIZE=150000  # ~50K tokens
+
+          if [ $DIFF_SIZE -gt $MAX_SIZE ]; then
+            echo "⚠️ Diff too large ($DIFF_SIZE bytes), truncating..."
+            head -c $MAX_SIZE diffs/all_diffs.txt > diffs/all_diffs_truncated.txt
+            echo "\n\n[... Diff truncated due to size ...]" >> diffs/all_diffs_truncated.txt
+            mv diffs/all_diffs_truncated.txt diffs/all_diffs.txt
+          fi
+
+          echo "diff_size=$DIFF_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Prepare review context
+        id: context
+        run: |
+          cat > review_context.json <<EOF
+          {
+            "pr_number": "${{ steps.pr-info.outputs.pr_number }}",
+            "pr_title": "${{ steps.pr-info.outputs.pr_title }}",
+            "pr_author": "${{ steps.pr-info.outputs.pr_author }}",
+            "base_branch": "${{ steps.pr-info.outputs.base_ref }}",
+            "head_branch": "${{ steps.pr-info.outputs.head_ref }}",
+            "files_changed": ${{ steps.changed-files.outputs.count }},
+            "lines_added": ${{ steps.changed-files.outputs.lines_added }},
+            "lines_deleted": ${{ steps.changed-files.outputs.lines_deleted }},
+            "repository": "${{ github.repository }}"
+          }
+          EOF
+
+      - name: Call Claude API for Review
+        id: claude-review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Load reviewer agent prompt
+          REVIEWER_PROMPT=$(cat << 'AGENT_PROMPT'
+          $(cat agents/reviewer-backend-py.md)
+          AGENT_PROMPT
+          )
+
+          # Prepare the review request
+          PR_CONTEXT=$(cat review_context.json)
+          PR_BODY=$(cat pr_body.txt | jq -Rs .)
+          CHANGED_FILES=$(cat changed_files.txt | jq -Rs .)
+          FILE_DIFFS=$(cat diffs/all_diffs.txt | jq -Rs .)
+
+          # Create API request
+          cat > api_request.json <<EOF
+          {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 4096,
+            "system": "$REVIEWER_PROMPT",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Please review this Pull Request:\n\n## PR Information\n\`\`\`json\n$PR_CONTEXT\n\`\`\`\n\n## PR Description\n$PR_BODY\n\n## Changed Files\n$CHANGED_FILES\n\n## File Diffs\n\`\`\`diff\n$FILE_DIFFS\n\`\`\`\n\nProvide a comprehensive code review following your review process. Include:\n1. Overall assessment (APPROVE/REQUEST_CHANGES)\n2. Architecture analysis\n3. Code quality issues\n4. Testing coverage\n5. Security concerns\n6. Specific actionable recommendations\n\nFormat your response in Markdown."
+              }
+            ]
+          }
+          EOF
+
+          # Call Claude API
+          RESPONSE=$(curl -s -X POST https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @api_request.json)
+
+          # Extract review content
+          REVIEW_CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          # Save review to file
+          echo "$REVIEW_CONTENT" > claude_review.md
+
+          # Determine review decision
+          if echo "$REVIEW_CONTENT" | grep -q "APPROVE"; then
+            DECISION="APPROVE"
+          elif echo "$REVIEW_CONTENT" | grep -q "REQUEST_CHANGES\|REQUEST CHANGES"; then
+            DECISION="REQUEST_CHANGES"
+          else
+            DECISION="COMMENT"
+          fi
+
+          echo "decision=$DECISION" >> $GITHUB_OUTPUT
+
+          # Extract scores if present
+          ARCH_SCORE=$(echo "$REVIEW_CONTENT" | grep -oP "Architecture.*?(\d+)/10" | grep -oP "\d+" | head -1 || echo "N/A")
+          QUALITY_SCORE=$(echo "$REVIEW_CONTENT" | grep -oP "Code Quality.*?(\d+)/10" | grep -oP "\d+" | head -1 || echo "N/A")
+          TEST_SCORE=$(echo "$REVIEW_CONTENT" | grep -oP "Testing.*?(\d+)/10" | grep -oP "\d+" | head -1 || echo "N/A")
+
+          echo "arch_score=$ARCH_SCORE" >> $GITHUB_OUTPUT
+          echo "quality_score=$QUALITY_SCORE" >> $GITHUB_OUTPUT
+          echo "test_score=$TEST_SCORE" >> $GITHUB_OUTPUT
+
+      - name: Post Review Comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Read review content
+          REVIEW_BODY=$(cat claude_review.md)
+
+          # Add metadata header
+          REVIEW_WITH_HEADER="## 🤖 AI Code Review by Claude
+
+          **Reviewer**: Claude Sonnet 4.5
+          **Review Date**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          **Files Analyzed**: ${{ steps.changed-files.outputs.count }}
+          **Lines Changed**: +${{ steps.changed-files.outputs.lines_added }} / -${{ steps.changed-files.outputs.lines_deleted }}
+
+          ---
+
+          $REVIEW_BODY
+
+          ---
+
+          <details>
+          <summary>📊 Review Metrics</summary>
+
+          - **Architecture Score**: ${{ steps.claude-review.outputs.arch_score }}/10
+          - **Code Quality Score**: ${{ steps.claude-review.outputs.quality_score }}/10
+          - **Testing Score**: ${{ steps.claude-review.outputs.test_score }}/10
+          - **Decision**: \`${{ steps.claude-review.outputs.decision }}\`
+
+          </details>
+
+          ---
+
+          *This review was generated automatically by Claude AI. Please use your judgment when addressing feedback.*"
+
+          # Post as PR review
+          gh pr review ${{ steps.pr-info.outputs.pr_number }} \
+            --comment \
+            --body "$REVIEW_WITH_HEADER"
+
+      - name: Create Check Run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DECISION="${{ steps.claude-review.outputs.decision }}"
+
+          if [ "$DECISION" = "APPROVE" ]; then
+            CONCLUSION="success"
+            TITLE="✅ Code Review Passed"
+            SUMMARY="Claude AI approved this PR. All quality criteria met."
+          elif [ "$DECISION" = "REQUEST_CHANGES" ]; then
+            CONCLUSION="failure"
+            TITLE="❌ Code Review: Changes Requested"
+            SUMMARY="Claude AI identified issues that need to be addressed before merge."
+          else
+            CONCLUSION="neutral"
+            TITLE="💬 Code Review: Comments"
+            SUMMARY="Claude AI provided feedback for consideration."
+          fi
+
+          # Create check via API
+          curl -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/check-runs \
+            -d "{
+              \"name\": \"Claude Code Review\",
+              \"head_sha\": \"${{ github.event.pull_request.head.sha }}\",
+              \"status\": \"completed\",
+              \"conclusion\": \"$CONCLUSION\",
+              \"output\": {
+                \"title\": \"$TITLE\",
+                \"summary\": \"$SUMMARY\",
+                \"text\": \"See PR comments for detailed review.\"
+              }
+            }"
+
+      - name: Generate Review Summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # 🤖 Claude Code Review Summary
+
+          ## PR Information
+          - **PR #**: ${{ steps.pr-info.outputs.pr_number }}
+          - **Title**: ${{ steps.pr-info.outputs.pr_title }}
+          - **Author**: @${{ steps.pr-info.outputs.pr_author }}
+
+          ## Changes
+          - **Files Changed**: ${{ steps.changed-files.outputs.count }}
+          - **Lines Added**: ${{ steps.changed-files.outputs.lines_added }}
+          - **Lines Deleted**: ${{ steps.changed-files.outputs.lines_deleted }}
+
+          ## Review Scores
+          - 🏗️ **Architecture**: ${{ steps.claude-review.outputs.arch_score }}/10
+          - 💻 **Code Quality**: ${{ steps.claude-review.outputs.quality_score }}/10
+          - 🧪 **Testing**: ${{ steps.claude-review.outputs.test_score }}/10
+
+          ## Decision
+          **${{ steps.claude-review.outputs.decision }}**
+
+          ---
+
+          See PR comments for detailed feedback.
+          EOF
+
+      - name: Upload Review Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-review-${{ steps.pr-info.outputs.pr_number }}
+          path: |
+            claude_review.md
+            review_context.json
+            changed_files.txt
+            diffs/
+          retention-days: 30
