@@ -37,7 +37,7 @@ jobs:
       - name: Get PR information
         id: pr-info
         env:
-          GH_TOKEN: ${{ secrets.VOLTOP_GITHUB_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
           PR_TITLE="${{ github.event.pull_request.title }}"
