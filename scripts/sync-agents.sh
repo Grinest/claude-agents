@@ -140,24 +140,37 @@ list_agents() {
     local source_dir="$1"
     local output_var="$2"
     local agents=()
+    local agent_paths=()
     local index=1
 
     echo ""
     echo -e "${CYAN}Agentes disponibles:${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    for agent_file in "$source_dir"/*.md; do
+    # Buscar en directorio raíz y subdirectorios
+    while IFS= read -r -d '' agent_file; do
         if [ -f "$agent_file" ]; then
-            local agent_name=$(basename "$agent_file" .md)
+            # Calcular ruta relativa desde source_dir
+            local rel_path="${agent_file#$source_dir/}"
+            local agent_name="${rel_path%.md}"
             local agent_desc=$(get_agent_description "$agent_file")
 
+            # Mostrar con prefijo de directorio si está en subdirectorio
+            local display_name="$agent_name"
+            if [[ "$rel_path" == */* ]]; then
+                display_name="${BLUE}$(dirname "$rel_path")/${NC}${YELLOW}$(basename "$rel_path" .md)${NC}"
+            else
+                display_name="${YELLOW}$agent_name${NC}"
+            fi
+
             agents+=("$agent_name")
-            echo -e "${GREEN}[$index]${NC} ${YELLOW}$agent_name${NC}"
+            agent_paths+=("$agent_file")
+            echo -e "${GREEN}[$index]${NC} $display_name"
             echo -e "    $agent_desc"
             echo ""
             ((index++))
         fi
-    done
+    done < <(find "$source_dir" -name "*.md" -print0 | sort -z)
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -182,12 +195,13 @@ copy_agents() {
 
     for agent in "${agents[@]}"; do
         local source_file="$source_dir/${agent}.md"
-        local dest_file="$PROJECT_AGENTS_DIR/${agent}.md"
+        # Mantener estructura plana en destino (basename solo)
+        local dest_file="$PROJECT_AGENTS_DIR/$(basename "${agent}.md")"
 
         if [ -f "$source_file" ]; then
             cp "$source_file" "$dest_file"
             if [ $? -eq 0 ]; then
-                print_success "Sincronizado: ${YELLOW}$agent${NC}"
+                print_success "Sincronizado: ${YELLOW}$agent${NC} → $(basename "${agent}.md")"
                 ((copied++))
             else
                 print_error "Error al copiar: $agent"

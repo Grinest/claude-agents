@@ -55,8 +55,8 @@ fi
 
 print_pass "Agents directory exists"
 
-# Contar archivos de agentes
-agent_count=$(find "$AGENTS_DIR" -maxdepth 1 -name "*.md" | wc -l | xargs)
+# Contar archivos de agentes (incluyendo subdirectorios, excluyendo README)
+agent_count=$(find "$AGENTS_DIR" -name "*.md" -type f ! -name "README.md" | wc -l | xargs)
 
 if [ "$agent_count" -eq 0 ]; then
     print_fail "No agent files found in $AGENTS_DIR"
@@ -66,13 +66,15 @@ fi
 print_pass "Found $agent_count agent file(s)"
 echo ""
 
-# Validar cada archivo de agente
-for agent_file in "$AGENTS_DIR"/*.md; do
+# Validar cada archivo de agente (incluyendo subdirectorios, excluyendo README)
+while IFS= read -r -d '' agent_file; do
     if [ ! -f "$agent_file" ]; then
         continue
     fi
 
-    agent_name=$(basename "$agent_file" .md)
+    # Calcular ruta relativa desde AGENTS_DIR
+    rel_path="${agent_file#$AGENTS_DIR/}"
+    agent_name="${rel_path%.md}"
     echo -e "${YELLOW}Testing agent: $agent_name${NC}"
     echo "────────────────────────────────────────────────"
 
@@ -199,7 +201,7 @@ for agent_file in "$AGENTS_DIR"/*.md; do
     fi
 
     echo ""
-done
+done < <(find "$AGENTS_DIR" -name "*.md" -type f ! -name "README.md" -print0 | sort -z)
 
 # Resumen final
 echo -e "${BLUE}"

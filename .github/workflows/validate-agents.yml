@@ -87,36 +87,47 @@ jobs:
           agents_dir = 'agents'
           failed = False
 
-          for filename in os.listdir(agents_dir):
-              if not filename.endswith('.md'):
-                  continue
+          # Walk through all subdirectories
+          for root, dirs, files in os.walk(agents_dir):
+              for filename in files:
+                  if not filename.endswith('.md'):
+                      continue
 
-              filepath = os.path.join(agents_dir, filename)
-              with open(filepath, 'r') as f:
-                  content = f.read()
+                  # Skip README files
+                  if filename == 'README.md':
+                      continue
 
-              # Extract frontmatter
-              if not content.startswith('---\n'):
-                  print(f"❌ {filename}: Missing frontmatter start")
-                  failed = True
-                  continue
+                  filepath = os.path.join(root, filename)
+                  rel_path = os.path.relpath(filepath, agents_dir)
 
-              try:
-                  end = content.index('\n---\n', 4)
-                  frontmatter = content[4:end]
-                  data = yaml.safe_load(frontmatter)
+                  with open(filepath, 'r') as f:
+                      content = f.read()
 
-                  # Validate required fields
-                  required = ['name', 'description', 'model', 'color']
-                  for field in required:
-                      if field not in data:
-                          print(f"❌ {filename}: Missing required field '{field}'")
-                          failed = True
+                  # Extract frontmatter
+                  if not content.startswith('---\n'):
+                      print(f"❌ {rel_path}: Missing frontmatter start")
+                      failed = True
+                      continue
 
-                  print(f"✅ {filename}: Valid YAML frontmatter")
-              except Exception as e:
-                  print(f"❌ {filename}: Invalid YAML - {str(e)}")
-                  failed = True
+                  try:
+                      end = content.index('\n---\n', 4)
+                      frontmatter = content[4:end]
+                      data = yaml.safe_load(frontmatter)
+
+                      # Validate required fields
+                      file_has_errors = False
+                      required = ['name', 'description', 'model', 'color']
+                      for field in required:
+                          if field not in data:
+                              print(f"❌ {rel_path}: Missing required field '{field}'")
+                              failed = True
+                              file_has_errors = True
+
+                      if not file_has_errors:
+                          print(f"✅ {rel_path}: Valid YAML frontmatter")
+                  except Exception as e:
+                      print(f"❌ {rel_path}: Invalid YAML - {str(e)}")
+                      failed = True
 
           sys.exit(1 if failed else 0)
           EOF
