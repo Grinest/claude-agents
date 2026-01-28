@@ -338,10 +338,19 @@ jobs:
 
           echo "decision=$DECISION" >> $GITHUB_OUTPUT
 
-          # Extract scores if present
-          ARCH_SCORE=$(echo "$REVIEW_CONTENT" | grep -oP "Architecture.*?(\d+)/10" | grep -oP "\d+" | head -1 || echo "N/A")
-          QUALITY_SCORE=$(echo "$REVIEW_CONTENT" | grep -oP "Code Quality.*?(\d+)/10" | grep -oP "\d+" | head -1 || echo "N/A")
-          TEST_SCORE=$(echo "$REVIEW_CONTENT" | grep -oP "Testing.*?(\d+)/10" | grep -oP "\d+" | head -1 || echo "N/A")
+          # Extract scores from section headers (more reliable than inline mentions)
+          # Look for format: "### 🏗️ Architecture (Score: X/10)" in section headers
+          # Use grep to find lines, then extract the number
+          ARCH_SCORE=$(echo "$REVIEW_CONTENT" | grep "^##.*Architecture.*Score:" | grep -o "[0-9]\+/10" | head -1 | cut -d'/' -f1)
+          QUALITY_SCORE=$(echo "$REVIEW_CONTENT" | grep "^##.*Code Quality.*Score:" | grep -o "[0-9]\+/10" | head -1 | cut -d'/' -f1)
+          TEST_SCORE=$(echo "$REVIEW_CONTENT" | grep "^##.*Testing.*Score:" | grep -o "[0-9]\+/10" | head -1 | cut -d'/' -f1)
+
+          # Set to N/A if empty
+          [ -z "$ARCH_SCORE" ] && ARCH_SCORE="N/A"
+          [ -z "$QUALITY_SCORE" ] && QUALITY_SCORE="N/A"
+          [ -z "$TEST_SCORE" ] && TEST_SCORE="N/A"
+
+          echo "📊 Extracted Scores: Arch=$ARCH_SCORE, Quality=$QUALITY_SCORE, Testing=$TEST_SCORE"
 
           echo "arch_score=$ARCH_SCORE" >> $GITHUB_OUTPUT
           echo "quality_score=$QUALITY_SCORE" >> $GITHUB_OUTPUT

@@ -670,6 +670,13 @@ DRY_RUN = True  # Change to False to actually execute
 
 ### Step 6: Generate Review
 
+**CRITICAL: Score Consistency**
+
+- Scores in section headers (`### 🏗️ Architecture (Score: X/10)`) are **FINAL and AUTHORITATIVE**
+- These scores will be extracted by automated systems for quality gates
+- Do NOT include additional score sections or metrics summaries - the workflow generates these automatically
+- Be consistent: the score in each section header MUST reflect your analysis in that section
+
 **Structure Your Review**:
 
 ```markdown
@@ -683,7 +690,7 @@ DRY_RUN = True  # Change to False to actually execute
 
 ---
 
-### 🏗️ Architecture (Score: X/10)
+## 🏗️ Architecture (Score: X/10)
 
 [Analysis of architectural decisions]
 
@@ -700,7 +707,7 @@ DRY_RUN = True  # Change to False to actually execute
 
 ---
 
-### 💻 Code Quality (Score: X/10)
+## 💻 Code Quality (Score: X/10)
 
 [Analysis of code quality]
 
@@ -716,7 +723,7 @@ DRY_RUN = True  # Change to False to actually execute
 
 ---
 
-### 🧪 Testing (Score: X/10)
+## 🧪 Testing (Score: X/10)
 
 [Analysis of test coverage and quality]
 
@@ -734,21 +741,21 @@ DRY_RUN = True  # Change to False to actually execute
 
 ---
 
-### 🔒 Security
+## 🔒 Security
 
 **Findings**:
 - [None | List of security issues]
 
 ---
 
-### ⚡ Performance
+## ⚡ Performance
 
 **Findings**:
 - [None | List of performance concerns]
 
 ---
 
-### 📋 Action Items
+## 📋 Action Items
 
 **Must Fix (Blocking Merge)**:
 1. [Critical item]
@@ -764,11 +771,13 @@ DRY_RUN = True  # Change to False to actually execute
 
 ---
 
-### ✅ Decision
+## ✅ Decision
 
 **[APPROVE | REQUEST CHANGES]**
 
 **Justification**: [Explain why approving or requesting changes]
+
+**IMPORTANT**: Do NOT add metrics summaries, score tables, or collapsible sections at the end. The GitHub Actions workflow will automatically generate these from your section header scores.
 ```
 
 ---
